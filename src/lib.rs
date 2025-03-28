@@ -1,9 +1,6 @@
 pub mod routes;
 
-pub use routes::{
-    CpuUtilization, DailyCpuUtilization, DailyGpuUtilization, GpuUtilization, HourlyCpuUtilization,
-    HourlyGpuUtilization, TimeRange,
-};
+pub use routes::{TimeRange, Utilization};
 
 use sqlx::sqlite::SqlitePool;
 

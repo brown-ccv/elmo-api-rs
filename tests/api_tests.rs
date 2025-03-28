@@ -3,13 +3,7 @@ use axum::{
     http::{Request, StatusCode},
     response::Response,
 };
-use elmo_api::{
-    create_app,
-    routes::{
-        CpuUtilization, DailyCpuUtilization, DailyGpuUtilization, GpuUtilization,
-        HourlyCpuUtilization, HourlyGpuUtilization,
-    },
-};
+use elmo_api::{create_app, routes::Utilization};
 use http_body_util::BodyExt;
 use sqlx::sqlite::SqlitePool;
 use tower::ServiceExt;
@@ -80,7 +74,7 @@ async fn test_get_cpu_utilization() {
     assert_eq!(response.status(), StatusCode::OK);
 
     let body = get_body_bytes(response).await;
-    let cpu_data: Vec<CpuUtilization> = serde_json::from_slice(&body).unwrap();
+    let cpu_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(cpu_data.len(), 4);
     assert_eq!(cpu_data[0].allocated, 75);
@@ -103,11 +97,11 @@ async fn test_get_hourly_cpu_utilization() {
     assert_eq!(response.status(), StatusCode::OK);
 
     let body = get_body_bytes(response).await;
-    let hourly_data: Vec<HourlyCpuUtilization> = serde_json::from_slice(&body).unwrap();
+    let hourly_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(hourly_data.len(), 1); // All data is in one hour
-    assert_eq!(hourly_data[0].avg_allocated, 82.5); // (75 + 80 + 85 + 90) / 4
-    assert_eq!(hourly_data[0].avg_total, 100.0);
+    assert_eq!(hourly_data[0].allocated, 83); // ROUND((75 + 80 + 85 + 90) / 4)
+    assert_eq!(hourly_data[0].total, 100);
 }
 
 #[tokio::test]
@@ -126,11 +120,11 @@ async fn test_get_daily_cpu_utilization() {
     assert_eq!(response.status(), StatusCode::OK);
 
     let body = get_body_bytes(response).await;
-    let daily_data: Vec<DailyCpuUtilization> = serde_json::from_slice(&body).unwrap();
+    let daily_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(daily_data.len(), 1); // All data is in one day
-    assert_eq!(daily_data[0].avg_allocated, 82.5); // (75 + 80 + 85 + 90) / 4
-    assert_eq!(daily_data[0].avg_total, 100.0);
+    assert_eq!(daily_data[0].allocated, 83); // ROUND((75 + 80 + 85 + 90) / 4)
+    assert_eq!(daily_data[0].total, 100);
 }
 
 #[tokio::test]
@@ -144,7 +138,7 @@ async fn test_get_gpu_utilization() {
     assert_eq!(response.status(), StatusCode::OK);
 
     let body = get_body_bytes(response).await;
-    let gpu_data: Vec<GpuUtilization> = serde_json::from_slice(&body).unwrap();
+    let gpu_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(gpu_data.len(), 4);
     assert_eq!(gpu_data[0].allocated, 60);
@@ -167,11 +161,11 @@ async fn test_get_hourly_gpu_utilization() {
     assert_eq!(response.status(), StatusCode::OK);
 
     let body = get_body_bytes(response).await;
-    let hourly_data: Vec<HourlyGpuUtilization> = serde_json::from_slice(&body).unwrap();
+    let hourly_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(hourly_data.len(), 1); // All data is in one hour
-    assert_eq!(hourly_data[0].avg_allocated, 67.5); // (60 + 65 + 70 + 75) / 4
-    assert_eq!(hourly_data[0].avg_total, 100.0);
+    assert_eq!(hourly_data[0].allocated, 68); // ROUND((60 + 65 + 70 + 75) / 4)
+    assert_eq!(hourly_data[0].total, 100);
 }
 
 #[tokio::test]
@@ -190,11 +184,11 @@ async fn test_get_daily_gpu_utilization() {
     assert_eq!(response.status(), StatusCode::OK);
 
     let body = get_body_bytes(response).await;
-    let daily_data: Vec<DailyGpuUtilization> = serde_json::from_slice(&body).unwrap();
+    let daily_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(daily_data.len(), 1); // All data is in one day
-    assert_eq!(daily_data[0].avg_allocated, 67.5); // (60 + 65 + 70 + 75) / 4
-    assert_eq!(daily_data[0].avg_total, 100.0);
+    assert_eq!(daily_data[0].allocated, 68); // ROUND((60 + 65 + 70 + 75) / 4)
+    assert_eq!(daily_data[0].total, 100);
 }
 
 #[tokio::test]
@@ -213,7 +207,7 @@ async fn test_time_range_filtering() {
     assert_eq!(response.status(), StatusCode::OK);
 
     let body = get_body_bytes(response).await;
-    let cpu_data: Vec<CpuUtilization> = serde_json::from_slice(&body).unwrap();
+    let cpu_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(cpu_data.len(), 3); // Only first 3 entries within time range
 }
