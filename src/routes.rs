@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use axum::{
     extract::{Query, State},
     http::StatusCode,
@@ -16,8 +18,8 @@ pub struct Utilization {
 
 #[derive(Debug, Deserialize)]
 pub struct TimeRange {
-    start_time: Option<String>,
-    end_time: Option<String>,
+    start: Option<String>,
+    end: Option<String>,
 }
 
 pub async fn root() -> &'static str {
@@ -28,7 +30,9 @@ pub async fn get_cpu_utilization(
     State(pool): State<SqlitePool>,
     Query(time_range): Query<TimeRange>,
 ) -> impl IntoResponse {
-    let query = if time_range.start_time.is_some() && time_range.end_time.is_some() {
+    let t1 = Instant::now();
+
+    let query = if time_range.start.is_some() && time_range.end.is_some() {
         r#"
         SELECT 
             time, 
@@ -48,22 +52,20 @@ pub async fn get_cpu_utilization(
         FROM  
             cpu 
         ORDER BY time
-        LIMIT 100
         "#
     };
 
-    let cpu_utilization =
-        if let (Some(start), Some(end)) = (time_range.start_time, time_range.end_time) {
-            sqlx::query_as::<_, Utilization>(query)
-                .bind(start)
-                .bind(end)
-                .fetch_all(&pool)
-                .await
-        } else {
-            sqlx::query_as::<_, Utilization>(query)
-                .fetch_all(&pool)
-                .await
-        };
+    let cpu_utilization = if let (Some(start), Some(end)) = (time_range.start, time_range.end) {
+        sqlx::query_as::<_, Utilization>(query)
+            .bind(start)
+            .bind(end)
+            .fetch_all(&pool)
+            .await
+    } else {
+        sqlx::query_as::<_, Utilization>(query)
+            .fetch_all(&pool)
+            .await
+    };
 
     let cpu_utilization = cpu_utilization
         .map_err(|e| {
@@ -71,6 +73,10 @@ pub async fn get_cpu_utilization(
             StatusCode::INTERNAL_SERVER_ERROR
         })
         .expect("Error: Could not get CPU utilization info");
+
+    let t2 = Instant::now();
+    let elapsed = t2.duration_since(t1);
+    tracing::info!("Retrieved result in: {:?}", elapsed);
 
     Json(cpu_utilization)
 }
@@ -83,7 +89,7 @@ pub async fn get_hourly_cpu_utilization(
     // This ensures that all entries within the same hour are properly grouped together.
     // The CTE approach is cleaner than using strftime directly in the GROUP BY clause
     // and makes the query more maintainable.
-    let query = if time_range.start_time.is_some() && time_range.end_time.is_some() {
+    let query = if time_range.start.is_some() && time_range.end.is_some() {
         r#"
         WITH formatted_time AS (
             -- First, format all timestamps to hourly precision (YYYY-MM-DD HH:00:00)
@@ -121,12 +127,11 @@ pub async fn get_hourly_cpu_utilization(
         FROM formatted_time
         GROUP BY time
         ORDER BY time
-        LIMIT 100
         "#
     };
 
     let hourly_cpu_utilization =
-        if let (Some(start), Some(end)) = (time_range.start_time, time_range.end_time) {
+        if let (Some(start), Some(end)) = (time_range.start, time_range.end) {
             sqlx::query_as::<_, Utilization>(query)
                 .bind(start)
                 .bind(end)
@@ -152,7 +157,7 @@ pub async fn get_gpu_utilization(
     State(pool): State<SqlitePool>,
     Query(time_range): Query<TimeRange>,
 ) -> impl IntoResponse {
-    let query = if time_range.start_time.is_some() && time_range.end_time.is_some() {
+    let query = if time_range.start.is_some() && time_range.end.is_some() {
         r#"
         SELECT 
             time, 
@@ -172,12 +177,10 @@ pub async fn get_gpu_utilization(
         FROM  
             gpu 
         ORDER BY time
-        LIMIT 100
         "#
     };
 
-    let utilization = if let (Some(start), Some(end)) = (time_range.start_time, time_range.end_time)
-    {
+    let utilization = if let (Some(start), Some(end)) = (time_range.start, time_range.end) {
         sqlx::query_as::<_, Utilization>(query)
             .bind(start)
             .bind(end)
@@ -207,7 +210,7 @@ pub async fn get_hourly_gpu_utilization(
     // This ensures that all entries within the same hour are properly grouped together.
     // The CTE approach is cleaner than using strftime directly in the GROUP BY clause
     // and makes the query more maintainable.
-    let query = if time_range.start_time.is_some() && time_range.end_time.is_some() {
+    let query = if time_range.start.is_some() && time_range.end.is_some() {
         r#"
         WITH formatted_time AS (
             -- First, format all timestamps to hourly precision (YYYY-MM-DD HH:00:00)
@@ -245,22 +248,20 @@ pub async fn get_hourly_gpu_utilization(
         FROM formatted_time
         GROUP BY time
         ORDER BY time
-        LIMIT 100
         "#
     };
 
-    let hourly_utilization =
-        if let (Some(start), Some(end)) = (time_range.start_time, time_range.end_time) {
-            sqlx::query_as::<_, Utilization>(query)
-                .bind(start)
-                .bind(end)
-                .fetch_all(&pool)
-                .await
-        } else {
-            sqlx::query_as::<_, Utilization>(query)
-                .fetch_all(&pool)
-                .await
-        };
+    let hourly_utilization = if let (Some(start), Some(end)) = (time_range.start, time_range.end) {
+        sqlx::query_as::<_, Utilization>(query)
+            .bind(start)
+            .bind(end)
+            .fetch_all(&pool)
+            .await
+    } else {
+        sqlx::query_as::<_, Utilization>(query)
+            .fetch_all(&pool)
+            .await
+    };
 
     let hourly_utilization = hourly_utilization
         .map_err(|e| {
@@ -280,7 +281,7 @@ pub async fn get_daily_cpu_utilization(
     // This ensures that all entries within the same day are properly grouped together.
     // The CTE approach is cleaner than using strftime directly in the GROUP BY clause
     // and makes the query more maintainable.
-    let query = if time_range.start_time.is_some() && time_range.end_time.is_some() {
+    let query = if time_range.start.is_some() && time_range.end.is_some() {
         r#"
         WITH formatted_time AS (
             -- First, format all timestamps to daily precision (YYYY-MM-DD)
@@ -318,22 +319,21 @@ pub async fn get_daily_cpu_utilization(
         FROM formatted_time
         GROUP BY time
         ORDER BY time
-        LIMIT 100
         "#
     };
 
-    let daily_cpu_utilization =
-        if let (Some(start), Some(end)) = (time_range.start_time, time_range.end_time) {
-            sqlx::query_as::<_, Utilization>(query)
-                .bind(start)
-                .bind(end)
-                .fetch_all(&pool)
-                .await
-        } else {
-            sqlx::query_as::<_, Utilization>(query)
-                .fetch_all(&pool)
-                .await
-        };
+    let daily_cpu_utilization = if let (Some(start), Some(end)) = (time_range.start, time_range.end)
+    {
+        sqlx::query_as::<_, Utilization>(query)
+            .bind(start)
+            .bind(end)
+            .fetch_all(&pool)
+            .await
+    } else {
+        sqlx::query_as::<_, Utilization>(query)
+            .fetch_all(&pool)
+            .await
+    };
 
     let daily_cpu_utilization = daily_cpu_utilization
         .map_err(|e| {
@@ -353,7 +353,7 @@ pub async fn get_daily_gpu_utilization(
     // This ensures that all entries within the same day are properly grouped together.
     // The CTE approach is cleaner than using strftime directly in the GROUP BY clause
     // and makes the query more maintainable.
-    let query = if time_range.start_time.is_some() && time_range.end_time.is_some() {
+    let query = if time_range.start.is_some() && time_range.end.is_some() {
         r#"
         WITH formatted_time AS (
             -- First, format all timestamps to daily precision (YYYY-MM-DD)
@@ -395,18 +395,17 @@ pub async fn get_daily_gpu_utilization(
         "#
     };
 
-    let daily_utilization =
-        if let (Some(start), Some(end)) = (time_range.start_time, time_range.end_time) {
-            sqlx::query_as::<_, Utilization>(query)
-                .bind(start)
-                .bind(end)
-                .fetch_all(&pool)
-                .await
-        } else {
-            sqlx::query_as::<_, Utilization>(query)
-                .fetch_all(&pool)
-                .await
-        };
+    let daily_utilization = if let (Some(start), Some(end)) = (time_range.start, time_range.end) {
+        sqlx::query_as::<_, Utilization>(query)
+            .bind(start)
+            .bind(end)
+            .fetch_all(&pool)
+            .await
+    } else {
+        sqlx::query_as::<_, Utilization>(query)
+            .fetch_all(&pool)
+            .await
+    };
 
     let daily_utilization = daily_utilization
         .map_err(|e| {
@@ -483,8 +482,8 @@ mod tests {
     async fn test_get_cpu_utilization_without_time_range() {
         let pool = setup_test_db().await;
         let time_range = TimeRange {
-            start_time: None,
-            end_time: None,
+            start: None,
+            end: None,
         };
 
         let result = get_cpu_utilization(State(pool), Query(time_range)).await;
@@ -504,8 +503,8 @@ mod tests {
     async fn test_get_cpu_utilization_with_time_range() {
         let pool = setup_test_db().await;
         let time_range = TimeRange {
-            start_time: Some("2024-03-27T00:00:00".to_string()),
-            end_time: Some("2024-03-27T00:30:00".to_string()),
+            start: Some("2024-03-27T00:00:00".to_string()),
+            end: Some("2024-03-27T00:30:00".to_string()),
         };
 
         let result = get_cpu_utilization(State(pool), Query(time_range)).await;
@@ -525,8 +524,8 @@ mod tests {
     async fn test_get_hourly_cpu_utilization() {
         let pool = setup_test_db().await;
         let time_range = TimeRange {
-            start_time: None,
-            end_time: None,
+            start: None,
+            end: None,
         };
 
         let result = get_hourly_cpu_utilization(State(pool), Query(time_range)).await;
@@ -546,8 +545,8 @@ mod tests {
     async fn test_get_daily_cpu_utilization() {
         let pool = setup_test_db().await;
         let time_range = TimeRange {
-            start_time: None,
-            end_time: None,
+            start: None,
+            end: None,
         };
 
         let result = get_daily_cpu_utilization(State(pool), Query(time_range)).await;
@@ -567,8 +566,8 @@ mod tests {
     async fn test_get_gpu_utilization_without_time_range() {
         let pool = setup_test_db().await;
         let time_range = TimeRange {
-            start_time: None,
-            end_time: None,
+            start: None,
+            end: None,
         };
 
         let result = get_gpu_utilization(State(pool), Query(time_range)).await;
@@ -588,8 +587,8 @@ mod tests {
     async fn test_get_hourly_gpu_utilization() {
         let pool = setup_test_db().await;
         let time_range = TimeRange {
-            start_time: None,
-            end_time: None,
+            start: None,
+            end: None,
         };
 
         let result = get_hourly_gpu_utilization(State(pool), Query(time_range)).await;
@@ -609,8 +608,8 @@ mod tests {
     async fn test_get_daily_gpu_utilization() {
         let pool = setup_test_db().await;
         let time_range = TimeRange {
-            start_time: None,
-            end_time: None,
+            start: None,
+            end: None,
         };
 
         let result = get_daily_gpu_utilization(State(pool), Query(time_range)).await;

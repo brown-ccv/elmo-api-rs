@@ -197,7 +197,7 @@ async fn test_time_range_filtering() {
     let response = app
         .oneshot(
             Request::builder()
-                .uri("/cpu?start_time=2024-03-27T00:00:00&end_time=2024-03-27T00:30:00")
+                .uri("/cpu?start=2024-03-27T00:00:00&end=2024-03-27T00:30:00")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -208,6 +208,8 @@ async fn test_time_range_filtering() {
 
     let body = get_body_bytes(response).await;
     let cpu_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
+
+    println!("cpu_data: {:?}", cpu_data);
 
     assert_eq!(cpu_data.len(), 3); // Only first 3 entries within time range
 }
