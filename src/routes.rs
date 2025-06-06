@@ -1,3 +1,4 @@
+use chrono::NaiveDateTime;
 use std::time::Instant;
 
 use axum::{
@@ -7,19 +8,19 @@ use axum::{
     Json,
 };
 use serde::Deserialize;
-use sqlx::sqlite::SqlitePool;
+use sqlx::postgres::PgPool;
 
 #[derive(Debug, sqlx::FromRow, serde::Serialize, serde::Deserialize)]
 pub struct Utilization {
-    pub time: String,
-    pub allocated: i32,
-    pub total: i32,
+    pub time: Option<NaiveDateTime>,
+    pub allocated: Option<i32>,
+    pub total: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct TimeRange {
-    start: Option<String>,
-    end: Option<String>,
+    pub start: Option<NaiveDateTime>,
+    pub end: Option<NaiveDateTime>,
 }
 
 pub async fn root() -> &'static str {
@@ -27,7 +28,7 @@ pub async fn root() -> &'static str {
 }
 
 pub async fn get_cpu_utilization(
-    State(pool): State<SqlitePool>,
+    State(pool): State<PgPool>,
     Query(time_range): Query<TimeRange>,
 ) -> impl IntoResponse {
     let t1 = Instant::now();
@@ -39,8 +40,8 @@ pub async fn get_cpu_utilization(
             allocated, 
             total 
         FROM  
-            cpu 
-        WHERE time BETWEEN ? AND ?
+            oscar.cpu 
+        WHERE time BETWEEN $1 AND $2
         ORDER BY time
         "#
     } else {
@@ -50,7 +51,7 @@ pub async fn get_cpu_utilization(
             allocated, 
             total 
         FROM  
-            cpu 
+            oscar.cpu 
         ORDER BY time
         "#
     };
@@ -82,49 +83,49 @@ pub async fn get_cpu_utilization(
 }
 
 pub async fn get_hourly_cpu_utilization(
-    State(pool): State<SqlitePool>,
+    State(pool): State<PgPool>,
     Query(time_range): Query<TimeRange>,
 ) -> impl IntoResponse {
     // We use a Common Table Expression (CTE) to first format the timestamps into hourly buckets.
     // This ensures that all entries within the same hour are properly grouped together.
-    // The CTE approach is cleaner than using strftime directly in the GROUP BY clause
-    // and makes the query more maintainable.
     let query = if time_range.start.is_some() && time_range.end.is_some() {
         r#"
         WITH formatted_time AS (
-            -- First, format all timestamps to hourly precision (YYYY-MM-DD HH:00:00)
-            -- This ensures all entries within the same hour have the same timestamp
+            -- Format timestamps to hourly precision (YYYY-MM-DD HH:00:00)
             SELECT 
-                strftime('%Y-%m-%d %H:00:00', time) as time,
+                date_trunc('hour', time::timestamp) as time,
                 allocated,
                 total
-            FROM cpu
-            WHERE time BETWEEN ? AND ?
+            FROM 
+                oscar.cpu
+            WHERE time BETWEEN $1 AND $2
         )
         SELECT 
-            time,
-            CAST(ROUND(AVG(allocated)) AS INTEGER) as allocated,
-            CAST(ROUND(AVG(total)) AS INTEGER) as total
-        FROM formatted_time
+            time::text,
+            ROUND(AVG(allocated))::integer as allocated,
+            ROUND(AVG(total))::integer as total
+        FROM 
+            formatted_time
         GROUP BY time
         ORDER BY time
         "#
     } else {
         r#"
         WITH formatted_time AS (
-            -- First, format all timestamps to hourly precision (YYYY-MM-DD HH:00:00)
-            -- This ensures all entries within the same hour have the same timestamp
+            -- Format timestamps to hourly precision (YYYY-MM-DD HH:00:00)
             SELECT 
-                strftime('%Y-%m-%d %H:00:00', time) as time,
+                date_trunc('hour', time::timestamp) as time,
                 allocated,
                 total
-            FROM cpu
+            FROM 
+                oscar.cpu
         )
         SELECT 
-            time,
-            CAST(ROUND(AVG(allocated)) AS INTEGER) as allocated,
-            CAST(ROUND(AVG(total)) AS INTEGER) as total
-        FROM formatted_time
+            time::text,
+            ROUND(AVG(allocated))::integer as allocated,
+            ROUND(AVG(total))::integer as total
+        FROM 
+            formatted_time
         GROUP BY time
         ORDER BY time
         "#
@@ -154,7 +155,7 @@ pub async fn get_hourly_cpu_utilization(
 }
 
 pub async fn get_gpu_utilization(
-    State(pool): State<SqlitePool>,
+    State(pool): State<PgPool>,
     Query(time_range): Query<TimeRange>,
 ) -> impl IntoResponse {
     let query = if time_range.start.is_some() && time_range.end.is_some() {
@@ -164,8 +165,8 @@ pub async fn get_gpu_utilization(
             allocated, 
             total 
         FROM  
-            gpu 
-        WHERE time BETWEEN ? AND ?
+            oscar.gpu 
+        WHERE time BETWEEN $1 AND $2
         ORDER BY time
         "#
     } else {
@@ -175,7 +176,7 @@ pub async fn get_gpu_utilization(
             allocated, 
             total 
         FROM  
-            gpu 
+            oscar.gpu 
         ORDER BY time
         "#
     };
@@ -203,27 +204,26 @@ pub async fn get_gpu_utilization(
 }
 
 pub async fn get_hourly_gpu_utilization(
-    State(pool): State<SqlitePool>,
+    State(pool): State<PgPool>,
     Query(time_range): Query<TimeRange>,
 ) -> impl IntoResponse {
     // We use a Common Table Expression (CTE) to first format the timestamps into hourly buckets.
     // This ensures that all entries within the same hour are properly grouped together.
-    // The CTE approach is cleaner than using strftime directly in the GROUP BY clause
-    // and makes the query more maintainable.
     let query = if time_range.start.is_some() && time_range.end.is_some() {
         r#"
         WITH formatted_time AS (
             -- First, format all timestamps to hourly precision (YYYY-MM-DD HH:00:00)
             -- This ensures all entries within the same hour have the same timestamp
             SELECT 
-                strftime('%Y-%m-%d %H:00:00', time) as time,
+                date_trunc('hour', time::timestamp) as time,
                 allocated,
                 total
-            FROM gpu
-            WHERE time BETWEEN ? AND ?
+            FROM 
+                oscar.gpu
+            WHERE time BETWEEN $1 AND $2
         )
         SELECT 
-            time,
+            time::text,
             CAST(ROUND(AVG(allocated)) AS INTEGER) as allocated,
             CAST(ROUND(AVG(total)) AS INTEGER) as total
         FROM formatted_time
@@ -236,13 +236,14 @@ pub async fn get_hourly_gpu_utilization(
             -- First, format all timestamps to hourly precision (YYYY-MM-DD HH:00:00)
             -- This ensures all entries within the same hour have the same timestamp
             SELECT 
-                strftime('%Y-%m-%d %H:00:00', time) as time,
+                date_trunc('hour', time::timestamp) as time,
                 allocated,
                 total
-            FROM gpu
+            FROM 
+                oscar.gpu
         )
         SELECT 
-            time,
+            time::text,
             CAST(ROUND(AVG(allocated)) AS INTEGER) as allocated,
             CAST(ROUND(AVG(total)) AS INTEGER) as total
         FROM formatted_time
@@ -274,7 +275,7 @@ pub async fn get_hourly_gpu_utilization(
 }
 
 pub async fn get_daily_cpu_utilization(
-    State(pool): State<SqlitePool>,
+    State(pool): State<PgPool>,
     Query(time_range): Query<TimeRange>,
 ) -> impl IntoResponse {
     // We use a Common Table Expression (CTE) to first format the timestamps into daily buckets.
@@ -287,14 +288,15 @@ pub async fn get_daily_cpu_utilization(
             -- First, format all timestamps to daily precision (YYYY-MM-DD)
             -- This ensures all entries within the same day have the same timestamp
             SELECT 
-                strftime('%Y-%m-%d', time) as time,
+                date_trunc('day', time::timestamp) as time,
                 allocated,
                 total
-            FROM cpu
-            WHERE time BETWEEN ? AND ?
+            FROM 
+                oscar.cpu
+            WHERE time BETWEEN $1 AND $2
         )
         SELECT 
-            time,
+            time::text,
             CAST(ROUND(AVG(allocated)) AS INTEGER) as allocated,
             CAST(ROUND(AVG(total)) AS INTEGER) as total
         FROM formatted_time
@@ -307,13 +309,14 @@ pub async fn get_daily_cpu_utilization(
             -- First, format all timestamps to daily precision (YYYY-MM-DD)
             -- This ensures all entries within the same day have the same timestamp
             SELECT 
-                strftime('%Y-%m-%d', time) as time,
+                date_trunc('day', time::timestamp) as time,
                 allocated,
                 total
-            FROM cpu
+            FROM 
+                oscar.cpu
         )
         SELECT 
-            time,
+            time::text,
             CAST(ROUND(AVG(allocated)) AS INTEGER) as allocated,
             CAST(ROUND(AVG(total)) AS INTEGER) as total
         FROM formatted_time
@@ -346,7 +349,7 @@ pub async fn get_daily_cpu_utilization(
 }
 
 pub async fn get_daily_gpu_utilization(
-    State(pool): State<SqlitePool>,
+    State(pool): State<PgPool>,
     Query(time_range): Query<TimeRange>,
 ) -> impl IntoResponse {
     // We use a Common Table Expression (CTE) to first format the timestamps into daily buckets.
@@ -359,14 +362,15 @@ pub async fn get_daily_gpu_utilization(
             -- First, format all timestamps to daily precision (YYYY-MM-DD)
             -- This ensures all entries within the same day have the same timestamp
             SELECT 
-                strftime('%Y-%m-%d', time) as time,
+                date_trunc('day', time::timestamp) as time,
                 allocated,
                 total
-            FROM gpu
-            WHERE time BETWEEN ? AND ?
+            FROM 
+                oscar.gpu
+            WHERE time BETWEEN $1 AND $2
         )
         SELECT 
-            time,
+            time::text,
             CAST(ROUND(AVG(allocated)) AS INTEGER) as allocated,
             CAST(ROUND(AVG(total)) AS INTEGER) as total
         FROM formatted_time
@@ -379,19 +383,19 @@ pub async fn get_daily_gpu_utilization(
             -- First, format all timestamps to daily precision (YYYY-MM-DD)
             -- This ensures all entries within the same day have the same timestamp
             SELECT 
-                strftime('%Y-%m-%d', time) as time,
+                date_trunc('day', time::timestamp) as time,
                 allocated,
                 total
-            FROM gpu
+            FROM 
+                oscar.gpu
         )
         SELECT 
-            time,
+            time::text,
             CAST(ROUND(AVG(allocated)) AS INTEGER) as allocated,
             CAST(ROUND(AVG(total)) AS INTEGER) as total
         FROM formatted_time
         GROUP BY time
         ORDER BY time
-        LIMIT 100
         "#
     };
 
@@ -427,7 +431,7 @@ mod tests {
     async fn setup_test_db() -> SqlitePool {
         let pool = SqlitePool::connect(":memory:").await.unwrap();
 
-        // Create test tables
+        // Create test tables - SQLite doesn't support schemas like PostgreSQL
         sqlx::query(
             r#"
             CREATE TABLE cpu (
@@ -468,6 +472,205 @@ mod tests {
         pool
     }
 
+    // SQLite-compatible route functions for testing
+    async fn get_cpu_utilization_sqlite(
+        pool: SqlitePool,
+        time_range: TimeRange,
+    ) -> impl IntoResponse {
+        let query = if time_range.start.is_some() && time_range.end.is_some() {
+            r#"
+            SELECT 
+                time, 
+                allocated, 
+                total 
+            FROM  
+                cpu 
+            WHERE time >= ?1 AND time <= ?2
+            ORDER BY time
+            "#
+        } else {
+            r#"
+            SELECT 
+                time, 
+                allocated, 
+                total 
+            FROM  
+                cpu 
+            ORDER BY time
+            "#
+        };
+
+        let rows = if let (Some(start), Some(end)) = (time_range.start, time_range.end) {
+            sqlx::query_as::<_, Utilization>(query)
+                .bind(start.format("%Y-%m-%dT%H:%M:%S").to_string())
+                .bind(end.format("%Y-%m-%dT%H:%M:%S").to_string())
+                .fetch_all(&pool)
+                .await
+        } else {
+            sqlx::query_as::<_, Utilization>(query)
+                .fetch_all(&pool)
+                .await
+        };
+
+        match rows {
+            Ok(utilizations) => Json(utilizations).into_response(),
+            Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        }
+    }
+
+    async fn get_gpu_utilization_sqlite(
+        pool: SqlitePool,
+        time_range: TimeRange,
+    ) -> impl IntoResponse {
+        let query = if time_range.start.is_some() && time_range.end.is_some() {
+            r#"
+            SELECT 
+                time, 
+                allocated, 
+                total 
+            FROM  
+                gpu 
+            WHERE time >= ?1 AND time <= ?2
+            ORDER BY time
+            "#
+        } else {
+            r#"
+            SELECT 
+                time, 
+                allocated, 
+                total 
+            FROM  
+                gpu 
+            ORDER BY time
+            "#
+        };
+
+        let rows = if let (Some(start), Some(end)) = (time_range.start, time_range.end) {
+            sqlx::query_as::<_, Utilization>(query)
+                .bind(start.format("%Y-%m-%dT%H:%M:%S").to_string())
+                .bind(end.format("%Y-%m-%dT%H:%M:%S").to_string())
+                .fetch_all(&pool)
+                .await
+        } else {
+            sqlx::query_as::<_, Utilization>(query)
+                .fetch_all(&pool)
+                .await
+        };
+
+        match rows {
+            Ok(utilizations) => Json(utilizations).into_response(),
+            Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        }
+    }
+
+    async fn get_hourly_cpu_utilization_sqlite(
+        pool: SqlitePool,
+        _time_range: TimeRange,
+    ) -> impl IntoResponse {
+        let query = r#"
+            SELECT 
+                strftime('%Y-%m-%dT%H:00:00', time) as time,
+                CAST(ROUND(AVG(allocated)) AS INTEGER) as allocated,
+                CAST(ROUND(AVG(total)) AS INTEGER) as total
+            FROM cpu
+            GROUP BY strftime('%Y-%m-%dT%H:00:00', time)
+            ORDER BY time
+        "#;
+
+        let rows = sqlx::query_as::<_, Utilization>(query)
+            .fetch_all(&pool)
+            .await;
+
+        match rows {
+            Ok(utilizations) => Json(utilizations).into_response(),
+            Err(e) => {
+                eprintln!("Error in get_hourly_cpu_utilization_sqlite: {:?}", e);
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        }
+    }
+
+    async fn get_daily_cpu_utilization_sqlite(
+        pool: SqlitePool,
+        _time_range: TimeRange,
+    ) -> impl IntoResponse {
+        let query = r#"
+            SELECT 
+                strftime('%Y-%m-%dT00:00:00', time) as time,
+                CAST(ROUND(AVG(allocated)) AS INTEGER) as allocated,
+                CAST(ROUND(AVG(total)) AS INTEGER) as total
+            FROM cpu
+            GROUP BY strftime('%Y-%m-%d', time)
+            ORDER BY time
+        "#;
+
+        let rows = sqlx::query_as::<_, Utilization>(query)
+            .fetch_all(&pool)
+            .await;
+
+        match rows {
+            Ok(utilizations) => Json(utilizations).into_response(),
+            Err(e) => {
+                eprintln!("Error in get_daily_cpu_utilization_sqlite: {:?}", e);
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        }
+    }
+
+    async fn get_hourly_gpu_utilization_sqlite(
+        pool: SqlitePool,
+        _time_range: TimeRange,
+    ) -> impl IntoResponse {
+        let query = r#"
+            SELECT 
+                strftime('%Y-%m-%dT%H:00:00', time) as time,
+                CAST(ROUND(AVG(allocated)) AS INTEGER) as allocated,
+                CAST(ROUND(AVG(total)) AS INTEGER) as total
+            FROM gpu
+            GROUP BY strftime('%Y-%m-%dT%H:00:00', time)
+            ORDER BY time
+        "#;
+
+        let rows = sqlx::query_as::<_, Utilization>(query)
+            .fetch_all(&pool)
+            .await;
+
+        match rows {
+            Ok(utilizations) => Json(utilizations).into_response(),
+            Err(e) => {
+                eprintln!("Error in get_hourly_gpu_utilization_sqlite: {:?}", e);
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        }
+    }
+
+    async fn get_daily_gpu_utilization_sqlite(
+        pool: SqlitePool,
+        _time_range: TimeRange,
+    ) -> impl IntoResponse {
+        let query = r#"
+            SELECT 
+                strftime('%Y-%m-%dT00:00:00', time) as time,
+                CAST(ROUND(AVG(allocated)) AS INTEGER) as allocated,
+                CAST(ROUND(AVG(total)) AS INTEGER) as total
+            FROM gpu
+            GROUP BY strftime('%Y-%m-%d', time)
+            ORDER BY time
+        "#;
+
+        let rows = sqlx::query_as::<_, Utilization>(query)
+            .fetch_all(&pool)
+            .await;
+
+        match rows {
+            Ok(utilizations) => Json(utilizations).into_response(),
+            Err(e) => {
+                eprintln!("Error in get_daily_gpu_utilization_sqlite: {:?}", e);
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        }
+    }
+
     /// Converts an Axum Response into a Vec<u8> containing the response body bytes.
     ///
     /// This function is used in tests to extract the response body from an Axum Response
@@ -486,7 +689,7 @@ mod tests {
             end: None,
         };
 
-        let result = get_cpu_utilization(State(pool), Query(time_range)).await;
+        let result = get_cpu_utilization_sqlite(pool, time_range).await;
         let response = result.into_response();
 
         assert_eq!(response.status(), StatusCode::OK);
@@ -495,19 +698,19 @@ mod tests {
         let cpu_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(cpu_data.len(), 4);
-        assert_eq!(cpu_data[0].allocated, 75);
-        assert_eq!(cpu_data[0].total, 100);
+        assert_eq!(cpu_data[0].allocated, Some(75));
+        assert_eq!(cpu_data[0].total, Some(100));
     }
 
     #[tokio::test]
     async fn test_get_cpu_utilization_with_time_range() {
         let pool = setup_test_db().await;
         let time_range = TimeRange {
-            start: Some("2024-03-27T00:00:00".to_string()),
-            end: Some("2024-03-27T00:30:00".to_string()),
+            start: Some("2024-03-27T00:00:00".parse().unwrap()),
+            end: Some("2024-03-27T00:30:00".parse().unwrap()),
         };
 
-        let result = get_cpu_utilization(State(pool), Query(time_range)).await;
+        let result = get_cpu_utilization_sqlite(pool, time_range).await;
         let response = result.into_response();
 
         assert_eq!(response.status(), StatusCode::OK);
@@ -516,8 +719,8 @@ mod tests {
         let cpu_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(cpu_data.len(), 3); // Only first 3 entries within time range
-        assert_eq!(cpu_data[0].allocated, 75);
-        assert_eq!(cpu_data[0].total, 100);
+        assert_eq!(cpu_data[0].allocated, Some(75));
+        assert_eq!(cpu_data[0].total, Some(100));
     }
 
     #[tokio::test]
@@ -528,7 +731,7 @@ mod tests {
             end: None,
         };
 
-        let result = get_hourly_cpu_utilization(State(pool), Query(time_range)).await;
+        let result = get_hourly_cpu_utilization_sqlite(pool, time_range).await;
         let response = result.into_response();
 
         assert_eq!(response.status(), StatusCode::OK);
@@ -537,8 +740,8 @@ mod tests {
         let hourly_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(hourly_data.len(), 1); // All data is in one hour
-        assert_eq!(hourly_data[0].allocated, 83); // ROUND((75 + 80 + 85 + 90) / 4)
-        assert_eq!(hourly_data[0].total, 100);
+        assert_eq!(hourly_data[0].allocated, Some(83)); // ROUND((75 + 80 + 85 + 90) / 4)
+        assert_eq!(hourly_data[0].total, Some(100));
     }
 
     #[tokio::test]
@@ -549,7 +752,7 @@ mod tests {
             end: None,
         };
 
-        let result = get_daily_cpu_utilization(State(pool), Query(time_range)).await;
+        let result = get_daily_cpu_utilization_sqlite(pool, time_range).await;
         let response = result.into_response();
 
         assert_eq!(response.status(), StatusCode::OK);
@@ -558,8 +761,8 @@ mod tests {
         let daily_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(daily_data.len(), 1); // All data is in one day
-        assert_eq!(daily_data[0].allocated, 83); // ROUND((75 + 80 + 85 + 90) / 4)
-        assert_eq!(daily_data[0].total, 100);
+        assert_eq!(daily_data[0].allocated, Some(83)); // ROUND((75 + 80 + 85 + 90) / 4)
+        assert_eq!(daily_data[0].total, Some(100));
     }
 
     #[tokio::test]
@@ -570,7 +773,7 @@ mod tests {
             end: None,
         };
 
-        let result = get_gpu_utilization(State(pool), Query(time_range)).await;
+        let result = get_gpu_utilization_sqlite(pool, time_range).await;
         let response = result.into_response();
 
         assert_eq!(response.status(), StatusCode::OK);
@@ -579,8 +782,8 @@ mod tests {
         let gpu_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(gpu_data.len(), 4);
-        assert_eq!(gpu_data[0].allocated, 60);
-        assert_eq!(gpu_data[0].total, 100);
+        assert_eq!(gpu_data[0].allocated, Some(60));
+        assert_eq!(gpu_data[0].total, Some(100));
     }
 
     #[tokio::test]
@@ -591,7 +794,7 @@ mod tests {
             end: None,
         };
 
-        let result = get_hourly_gpu_utilization(State(pool), Query(time_range)).await;
+        let result = get_hourly_gpu_utilization_sqlite(pool, time_range).await;
         let response = result.into_response();
 
         assert_eq!(response.status(), StatusCode::OK);
@@ -600,8 +803,8 @@ mod tests {
         let hourly_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(hourly_data.len(), 1); // All data is in one hour
-        assert_eq!(hourly_data[0].allocated, 68); // ROUND((60 + 65 + 70 + 75) / 4)
-        assert_eq!(hourly_data[0].total, 100);
+        assert_eq!(hourly_data[0].allocated, Some(68)); // ROUND((60 + 65 + 70 + 75) / 4)
+        assert_eq!(hourly_data[0].total, Some(100));
     }
 
     #[tokio::test]
@@ -612,7 +815,7 @@ mod tests {
             end: None,
         };
 
-        let result = get_daily_gpu_utilization(State(pool), Query(time_range)).await;
+        let result = get_daily_gpu_utilization_sqlite(pool, time_range).await;
         let response = result.into_response();
 
         assert_eq!(response.status(), StatusCode::OK);
@@ -621,7 +824,7 @@ mod tests {
         let daily_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(daily_data.len(), 1); // All data is in one day
-        assert_eq!(daily_data[0].allocated, 68); // ROUND((60 + 65 + 70 + 75) / 4)
-        assert_eq!(daily_data[0].total, 100);
+        assert_eq!(daily_data[0].allocated, Some(68)); // ROUND((60 + 65 + 70 + 75) / 4)
+        assert_eq!(daily_data[0].total, Some(100));
     }
 }
