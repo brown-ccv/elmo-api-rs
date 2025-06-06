@@ -1,3 +1,4 @@
+use chrono::NaiveDateTime;
 use std::time::Instant;
 
 use axum::{
@@ -7,19 +8,19 @@ use axum::{
     Json,
 };
 use serde::Deserialize;
-use sqlx::sqlite::SqlitePool;
+use sqlx::postgres::PgPool;
 
 #[derive(Debug, sqlx::FromRow, serde::Serialize, serde::Deserialize)]
 pub struct Utilization {
-    pub time: String,
-    pub allocated: i32,
-    pub total: i32,
+    pub time: Option<NaiveDateTime>,
+    pub allocated: Option<i32>,
+    pub total: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct TimeRange {
-    start: Option<String>,
-    end: Option<String>,
+    start: Option<NaiveDateTime>,
+    end: Option<NaiveDateTime>,
 }
 
 pub async fn root() -> &'static str {
@@ -27,7 +28,7 @@ pub async fn root() -> &'static str {
 }
 
 pub async fn get_cpu_utilization(
-    State(pool): State<SqlitePool>,
+    State(pool): State<PgPool>,
     Query(time_range): Query<TimeRange>,
 ) -> impl IntoResponse {
     let t1 = Instant::now();
@@ -39,8 +40,8 @@ pub async fn get_cpu_utilization(
             allocated, 
             total 
         FROM  
-            cpu 
-        WHERE time BETWEEN ? AND ?
+            oscar.cpu 
+        WHERE time BETWEEN $1 AND $2
         ORDER BY time
         "#
     } else {
@@ -50,7 +51,7 @@ pub async fn get_cpu_utilization(
             allocated, 
             total 
         FROM  
-            cpu 
+            oscar.cpu 
         ORDER BY time
         "#
     };
@@ -82,49 +83,49 @@ pub async fn get_cpu_utilization(
 }
 
 pub async fn get_hourly_cpu_utilization(
-    State(pool): State<SqlitePool>,
+    State(pool): State<PgPool>,
     Query(time_range): Query<TimeRange>,
 ) -> impl IntoResponse {
     // We use a Common Table Expression (CTE) to first format the timestamps into hourly buckets.
     // This ensures that all entries within the same hour are properly grouped together.
-    // The CTE approach is cleaner than using strftime directly in the GROUP BY clause
-    // and makes the query more maintainable.
     let query = if time_range.start.is_some() && time_range.end.is_some() {
         r#"
         WITH formatted_time AS (
-            -- First, format all timestamps to hourly precision (YYYY-MM-DD HH:00:00)
-            -- This ensures all entries within the same hour have the same timestamp
+            -- Format timestamps to hourly precision (YYYY-MM-DD HH:00:00)
             SELECT 
-                strftime('%Y-%m-%d %H:00:00', time) as time,
+                date_trunc('hour', time::timestamp) as time,
                 allocated,
                 total
-            FROM cpu
-            WHERE time BETWEEN ? AND ?
+            FROM 
+                oscar.cpu
+            WHERE time BETWEEN $1 AND $2
         )
         SELECT 
-            time,
-            CAST(ROUND(AVG(allocated)) AS INTEGER) as allocated,
-            CAST(ROUND(AVG(total)) AS INTEGER) as total
-        FROM formatted_time
+            time::text,
+            ROUND(AVG(allocated))::integer as allocated,
+            ROUND(AVG(total))::integer as total
+        FROM 
+            formatted_time
         GROUP BY time
         ORDER BY time
         "#
     } else {
         r#"
         WITH formatted_time AS (
-            -- First, format all timestamps to hourly precision (YYYY-MM-DD HH:00:00)
-            -- This ensures all entries within the same hour have the same timestamp
+            -- Format timestamps to hourly precision (YYYY-MM-DD HH:00:00)
             SELECT 
-                strftime('%Y-%m-%d %H:00:00', time) as time,
+                date_trunc('hour', time::timestamp) as time,
                 allocated,
                 total
-            FROM cpu
+            FROM 
+                oscar.cpu
         )
         SELECT 
-            time,
-            CAST(ROUND(AVG(allocated)) AS INTEGER) as allocated,
-            CAST(ROUND(AVG(total)) AS INTEGER) as total
-        FROM formatted_time
+            time::text,
+            ROUND(AVG(allocated))::integer as allocated,
+            ROUND(AVG(total))::integer as total
+        FROM 
+            formatted_time
         GROUP BY time
         ORDER BY time
         "#
@@ -154,7 +155,7 @@ pub async fn get_hourly_cpu_utilization(
 }
 
 pub async fn get_gpu_utilization(
-    State(pool): State<SqlitePool>,
+    State(pool): State<PgPool>,
     Query(time_range): Query<TimeRange>,
 ) -> impl IntoResponse {
     let query = if time_range.start.is_some() && time_range.end.is_some() {
@@ -164,8 +165,8 @@ pub async fn get_gpu_utilization(
             allocated, 
             total 
         FROM  
-            gpu 
-        WHERE time BETWEEN ? AND ?
+            oscar.gpu 
+        WHERE time BETWEEN $1 AND $2
         ORDER BY time
         "#
     } else {
@@ -175,7 +176,7 @@ pub async fn get_gpu_utilization(
             allocated, 
             total 
         FROM  
-            gpu 
+            oscar.gpu 
         ORDER BY time
         "#
     };
@@ -203,27 +204,26 @@ pub async fn get_gpu_utilization(
 }
 
 pub async fn get_hourly_gpu_utilization(
-    State(pool): State<SqlitePool>,
+    State(pool): State<PgPool>,
     Query(time_range): Query<TimeRange>,
 ) -> impl IntoResponse {
     // We use a Common Table Expression (CTE) to first format the timestamps into hourly buckets.
     // This ensures that all entries within the same hour are properly grouped together.
-    // The CTE approach is cleaner than using strftime directly in the GROUP BY clause
-    // and makes the query more maintainable.
     let query = if time_range.start.is_some() && time_range.end.is_some() {
         r#"
         WITH formatted_time AS (
             -- First, format all timestamps to hourly precision (YYYY-MM-DD HH:00:00)
             -- This ensures all entries within the same hour have the same timestamp
             SELECT 
-                strftime('%Y-%m-%d %H:00:00', time) as time,
+                date_trunc('hour', time::timestamp) as time,
                 allocated,
                 total
-            FROM gpu
-            WHERE time BETWEEN ? AND ?
+            FROM 
+                oscar.gpu
+            WHERE time BETWEEN $1 AND $2
         )
         SELECT 
-            time,
+            time::text,
             CAST(ROUND(AVG(allocated)) AS INTEGER) as allocated,
             CAST(ROUND(AVG(total)) AS INTEGER) as total
         FROM formatted_time
@@ -236,13 +236,14 @@ pub async fn get_hourly_gpu_utilization(
             -- First, format all timestamps to hourly precision (YYYY-MM-DD HH:00:00)
             -- This ensures all entries within the same hour have the same timestamp
             SELECT 
-                strftime('%Y-%m-%d %H:00:00', time) as time,
+                date_trunc('hour', time::timestamp) as time,
                 allocated,
                 total
-            FROM gpu
+            FROM 
+                oscar.gpu
         )
         SELECT 
-            time,
+            time::text,
             CAST(ROUND(AVG(allocated)) AS INTEGER) as allocated,
             CAST(ROUND(AVG(total)) AS INTEGER) as total
         FROM formatted_time
@@ -274,7 +275,7 @@ pub async fn get_hourly_gpu_utilization(
 }
 
 pub async fn get_daily_cpu_utilization(
-    State(pool): State<SqlitePool>,
+    State(pool): State<PgPool>,
     Query(time_range): Query<TimeRange>,
 ) -> impl IntoResponse {
     // We use a Common Table Expression (CTE) to first format the timestamps into daily buckets.
@@ -287,14 +288,15 @@ pub async fn get_daily_cpu_utilization(
             -- First, format all timestamps to daily precision (YYYY-MM-DD)
             -- This ensures all entries within the same day have the same timestamp
             SELECT 
-                strftime('%Y-%m-%d', time) as time,
+                date_trunc('day', time::timestamp) as time,
                 allocated,
                 total
-            FROM cpu
-            WHERE time BETWEEN ? AND ?
+            FROM 
+                oscar.cpu
+            WHERE time BETWEEN $1 AND $2
         )
         SELECT 
-            time,
+            time::text,
             CAST(ROUND(AVG(allocated)) AS INTEGER) as allocated,
             CAST(ROUND(AVG(total)) AS INTEGER) as total
         FROM formatted_time
@@ -307,13 +309,14 @@ pub async fn get_daily_cpu_utilization(
             -- First, format all timestamps to daily precision (YYYY-MM-DD)
             -- This ensures all entries within the same day have the same timestamp
             SELECT 
-                strftime('%Y-%m-%d', time) as time,
+                date_trunc('day', time::timestamp) as time,
                 allocated,
                 total
-            FROM cpu
+            FROM 
+                oscar.cpu
         )
         SELECT 
-            time,
+            time::text,
             CAST(ROUND(AVG(allocated)) AS INTEGER) as allocated,
             CAST(ROUND(AVG(total)) AS INTEGER) as total
         FROM formatted_time
@@ -346,7 +349,7 @@ pub async fn get_daily_cpu_utilization(
 }
 
 pub async fn get_daily_gpu_utilization(
-    State(pool): State<SqlitePool>,
+    State(pool): State<PgPool>,
     Query(time_range): Query<TimeRange>,
 ) -> impl IntoResponse {
     // We use a Common Table Expression (CTE) to first format the timestamps into daily buckets.
@@ -359,14 +362,15 @@ pub async fn get_daily_gpu_utilization(
             -- First, format all timestamps to daily precision (YYYY-MM-DD)
             -- This ensures all entries within the same day have the same timestamp
             SELECT 
-                strftime('%Y-%m-%d', time) as time,
+                date_trunc('day', time::timestamp) as time,
                 allocated,
                 total
-            FROM gpu
-            WHERE time BETWEEN ? AND ?
+            FROM 
+                oscar.gpu
+            WHERE time BETWEEN $1 AND $2
         )
         SELECT 
-            time,
+            time::text,
             CAST(ROUND(AVG(allocated)) AS INTEGER) as allocated,
             CAST(ROUND(AVG(total)) AS INTEGER) as total
         FROM formatted_time
@@ -379,19 +383,19 @@ pub async fn get_daily_gpu_utilization(
             -- First, format all timestamps to daily precision (YYYY-MM-DD)
             -- This ensures all entries within the same day have the same timestamp
             SELECT 
-                strftime('%Y-%m-%d', time) as time,
+                date_trunc('day', time::timestamp) as time,
                 allocated,
                 total
-            FROM gpu
+            FROM 
+                oscar.gpu
         )
         SELECT 
-            time,
+            time::text,
             CAST(ROUND(AVG(allocated)) AS INTEGER) as allocated,
             CAST(ROUND(AVG(total)) AS INTEGER) as total
         FROM formatted_time
         GROUP BY time
         ORDER BY time
-        LIMIT 100
         "#
     };
 
@@ -422,10 +426,12 @@ mod tests {
     use super::*;
     use axum::response::Response;
     use http_body_util::BodyExt;
-    use sqlx::sqlite::SqlitePool;
+    use sqlx::postgres::PgPool;
 
-    async fn setup_test_db() -> SqlitePool {
-        let pool = SqlitePool::connect(":memory:").await.unwrap();
+    async fn setup_test_db() -> PgPool {
+        let pool = PgPool::connect("postgres://postgres:password@localhost/test")
+            .await
+            .unwrap();
 
         // Create test tables
         sqlx::query(
