@@ -19,8 +19,8 @@ pub struct Utilization {
 
 #[derive(Debug, Deserialize)]
 pub struct TimeRange {
-    start: Option<NaiveDateTime>,
-    end: Option<NaiveDateTime>,
+    pub start: Option<NaiveDateTime>,
+    pub end: Option<NaiveDateTime>,
 }
 
 pub async fn root() -> &'static str {
@@ -501,16 +501,16 @@ mod tests {
         let cpu_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(cpu_data.len(), 4);
-        assert_eq!(cpu_data[0].allocated, 75);
-        assert_eq!(cpu_data[0].total, 100);
+        assert_eq!(cpu_data[0].allocated, Some(75));
+        assert_eq!(cpu_data[0].total, Some(100));
     }
 
     #[tokio::test]
     async fn test_get_cpu_utilization_with_time_range() {
         let pool = setup_test_db().await;
         let time_range = TimeRange {
-            start: Some("2024-03-27T00:00:00".to_string()),
-            end: Some("2024-03-27T00:30:00".to_string()),
+            start: Some("2024-03-27T00:00:00".parse().unwrap()),
+            end: Some("2024-03-27T00:30:00".parse().unwrap()),
         };
 
         let result = get_cpu_utilization(State(pool), Query(time_range)).await;
@@ -522,8 +522,8 @@ mod tests {
         let cpu_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(cpu_data.len(), 3); // Only first 3 entries within time range
-        assert_eq!(cpu_data[0].allocated, 75);
-        assert_eq!(cpu_data[0].total, 100);
+        assert_eq!(cpu_data[0].allocated, Some(75));
+        assert_eq!(cpu_data[0].total, Some(100));
     }
 
     #[tokio::test]
@@ -543,8 +543,8 @@ mod tests {
         let hourly_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(hourly_data.len(), 1); // All data is in one hour
-        assert_eq!(hourly_data[0].allocated, 83); // ROUND((75 + 80 + 85 + 90) / 4)
-        assert_eq!(hourly_data[0].total, 100);
+        assert_eq!(hourly_data[0].allocated, Some(83)); // ROUND((75 + 80 + 85 + 90) / 4)
+        assert_eq!(hourly_data[0].total, Some(100));
     }
 
     #[tokio::test]
@@ -564,8 +564,8 @@ mod tests {
         let daily_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(daily_data.len(), 1); // All data is in one day
-        assert_eq!(daily_data[0].allocated, 83); // ROUND((75 + 80 + 85 + 90) / 4)
-        assert_eq!(daily_data[0].total, 100);
+        assert_eq!(daily_data[0].allocated, Some(83)); // ROUND((75 + 80 + 85 + 90) / 4)
+        assert_eq!(daily_data[0].total, Some(100));
     }
 
     #[tokio::test]
@@ -585,8 +585,8 @@ mod tests {
         let gpu_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(gpu_data.len(), 4);
-        assert_eq!(gpu_data[0].allocated, 60);
-        assert_eq!(gpu_data[0].total, 100);
+        assert_eq!(gpu_data[0].allocated, Some(60));
+        assert_eq!(gpu_data[0].total, Some(100));
     }
 
     #[tokio::test]
@@ -606,8 +606,8 @@ mod tests {
         let hourly_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(hourly_data.len(), 1); // All data is in one hour
-        assert_eq!(hourly_data[0].allocated, 68); // ROUND((60 + 65 + 70 + 75) / 4)
-        assert_eq!(hourly_data[0].total, 100);
+        assert_eq!(hourly_data[0].allocated, Some(68)); // ROUND((60 + 65 + 70 + 75) / 4)
+        assert_eq!(hourly_data[0].total, Some(100));
     }
 
     #[tokio::test]
@@ -627,7 +627,7 @@ mod tests {
         let daily_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(daily_data.len(), 1); // All data is in one day
-        assert_eq!(daily_data[0].allocated, 68); // ROUND((60 + 65 + 70 + 75) / 4)
-        assert_eq!(daily_data[0].total, 100);
+        assert_eq!(daily_data[0].allocated, Some(68)); // ROUND((60 + 65 + 70 + 75) / 4)
+        assert_eq!(daily_data[0].total, Some(100));
     }
 }
