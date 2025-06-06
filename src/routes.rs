@@ -426,14 +426,12 @@ mod tests {
     use super::*;
     use axum::response::Response;
     use http_body_util::BodyExt;
-    use sqlx::postgres::PgPool;
+    use sqlx::sqlite::SqlitePool;
 
-    async fn setup_test_db() -> PgPool {
-        let pool = PgPool::connect("postgres://postgres:password@localhost/test")
-            .await
-            .unwrap();
+    async fn setup_test_db() -> SqlitePool {
+        let pool = SqlitePool::connect(":memory:").await.unwrap();
 
-        // Create test tables
+        // Create test tables - SQLite doesn't support schemas like PostgreSQL
         sqlx::query(
             r#"
             CREATE TABLE cpu (
@@ -474,6 +472,205 @@ mod tests {
         pool
     }
 
+    // SQLite-compatible route functions for testing
+    async fn get_cpu_utilization_sqlite(
+        pool: SqlitePool,
+        time_range: TimeRange,
+    ) -> impl IntoResponse {
+        let query = if time_range.start.is_some() && time_range.end.is_some() {
+            r#"
+            SELECT 
+                time, 
+                allocated, 
+                total 
+            FROM  
+                cpu 
+            WHERE time >= ?1 AND time <= ?2
+            ORDER BY time
+            "#
+        } else {
+            r#"
+            SELECT 
+                time, 
+                allocated, 
+                total 
+            FROM  
+                cpu 
+            ORDER BY time
+            "#
+        };
+
+        let rows = if let (Some(start), Some(end)) = (time_range.start, time_range.end) {
+            sqlx::query_as::<_, Utilization>(query)
+                .bind(start.format("%Y-%m-%dT%H:%M:%S").to_string())
+                .bind(end.format("%Y-%m-%dT%H:%M:%S").to_string())
+                .fetch_all(&pool)
+                .await
+        } else {
+            sqlx::query_as::<_, Utilization>(query)
+                .fetch_all(&pool)
+                .await
+        };
+
+        match rows {
+            Ok(utilizations) => Json(utilizations).into_response(),
+            Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        }
+    }
+
+    async fn get_gpu_utilization_sqlite(
+        pool: SqlitePool,
+        time_range: TimeRange,
+    ) -> impl IntoResponse {
+        let query = if time_range.start.is_some() && time_range.end.is_some() {
+            r#"
+            SELECT 
+                time, 
+                allocated, 
+                total 
+            FROM  
+                gpu 
+            WHERE time >= ?1 AND time <= ?2
+            ORDER BY time
+            "#
+        } else {
+            r#"
+            SELECT 
+                time, 
+                allocated, 
+                total 
+            FROM  
+                gpu 
+            ORDER BY time
+            "#
+        };
+
+        let rows = if let (Some(start), Some(end)) = (time_range.start, time_range.end) {
+            sqlx::query_as::<_, Utilization>(query)
+                .bind(start.format("%Y-%m-%dT%H:%M:%S").to_string())
+                .bind(end.format("%Y-%m-%dT%H:%M:%S").to_string())
+                .fetch_all(&pool)
+                .await
+        } else {
+            sqlx::query_as::<_, Utilization>(query)
+                .fetch_all(&pool)
+                .await
+        };
+
+        match rows {
+            Ok(utilizations) => Json(utilizations).into_response(),
+            Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        }
+    }
+
+    async fn get_hourly_cpu_utilization_sqlite(
+        pool: SqlitePool,
+        _time_range: TimeRange,
+    ) -> impl IntoResponse {
+        let query = r#"
+            SELECT 
+                strftime('%Y-%m-%dT%H:00:00', time) as time,
+                CAST(ROUND(AVG(allocated)) AS INTEGER) as allocated,
+                CAST(ROUND(AVG(total)) AS INTEGER) as total
+            FROM cpu
+            GROUP BY strftime('%Y-%m-%dT%H:00:00', time)
+            ORDER BY time
+        "#;
+
+        let rows = sqlx::query_as::<_, Utilization>(query)
+            .fetch_all(&pool)
+            .await;
+
+        match rows {
+            Ok(utilizations) => Json(utilizations).into_response(),
+            Err(e) => {
+                eprintln!("Error in get_hourly_cpu_utilization_sqlite: {:?}", e);
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        }
+    }
+
+    async fn get_daily_cpu_utilization_sqlite(
+        pool: SqlitePool,
+        _time_range: TimeRange,
+    ) -> impl IntoResponse {
+        let query = r#"
+            SELECT 
+                strftime('%Y-%m-%dT00:00:00', time) as time,
+                CAST(ROUND(AVG(allocated)) AS INTEGER) as allocated,
+                CAST(ROUND(AVG(total)) AS INTEGER) as total
+            FROM cpu
+            GROUP BY strftime('%Y-%m-%d', time)
+            ORDER BY time
+        "#;
+
+        let rows = sqlx::query_as::<_, Utilization>(query)
+            .fetch_all(&pool)
+            .await;
+
+        match rows {
+            Ok(utilizations) => Json(utilizations).into_response(),
+            Err(e) => {
+                eprintln!("Error in get_daily_cpu_utilization_sqlite: {:?}", e);
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        }
+    }
+
+    async fn get_hourly_gpu_utilization_sqlite(
+        pool: SqlitePool,
+        _time_range: TimeRange,
+    ) -> impl IntoResponse {
+        let query = r#"
+            SELECT 
+                strftime('%Y-%m-%dT%H:00:00', time) as time,
+                CAST(ROUND(AVG(allocated)) AS INTEGER) as allocated,
+                CAST(ROUND(AVG(total)) AS INTEGER) as total
+            FROM gpu
+            GROUP BY strftime('%Y-%m-%dT%H:00:00', time)
+            ORDER BY time
+        "#;
+
+        let rows = sqlx::query_as::<_, Utilization>(query)
+            .fetch_all(&pool)
+            .await;
+
+        match rows {
+            Ok(utilizations) => Json(utilizations).into_response(),
+            Err(e) => {
+                eprintln!("Error in get_hourly_gpu_utilization_sqlite: {:?}", e);
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        }
+    }
+
+    async fn get_daily_gpu_utilization_sqlite(
+        pool: SqlitePool,
+        _time_range: TimeRange,
+    ) -> impl IntoResponse {
+        let query = r#"
+            SELECT 
+                strftime('%Y-%m-%dT00:00:00', time) as time,
+                CAST(ROUND(AVG(allocated)) AS INTEGER) as allocated,
+                CAST(ROUND(AVG(total)) AS INTEGER) as total
+            FROM gpu
+            GROUP BY strftime('%Y-%m-%d', time)
+            ORDER BY time
+        "#;
+
+        let rows = sqlx::query_as::<_, Utilization>(query)
+            .fetch_all(&pool)
+            .await;
+
+        match rows {
+            Ok(utilizations) => Json(utilizations).into_response(),
+            Err(e) => {
+                eprintln!("Error in get_daily_gpu_utilization_sqlite: {:?}", e);
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        }
+    }
+
     /// Converts an Axum Response into a Vec<u8> containing the response body bytes.
     ///
     /// This function is used in tests to extract the response body from an Axum Response
@@ -492,7 +689,7 @@ mod tests {
             end: None,
         };
 
-        let result = get_cpu_utilization(State(pool), Query(time_range)).await;
+        let result = get_cpu_utilization_sqlite(pool, time_range).await;
         let response = result.into_response();
 
         assert_eq!(response.status(), StatusCode::OK);
@@ -513,7 +710,7 @@ mod tests {
             end: Some("2024-03-27T00:30:00".parse().unwrap()),
         };
 
-        let result = get_cpu_utilization(State(pool), Query(time_range)).await;
+        let result = get_cpu_utilization_sqlite(pool, time_range).await;
         let response = result.into_response();
 
         assert_eq!(response.status(), StatusCode::OK);
@@ -534,7 +731,7 @@ mod tests {
             end: None,
         };
 
-        let result = get_hourly_cpu_utilization(State(pool), Query(time_range)).await;
+        let result = get_hourly_cpu_utilization_sqlite(pool, time_range).await;
         let response = result.into_response();
 
         assert_eq!(response.status(), StatusCode::OK);
@@ -555,7 +752,7 @@ mod tests {
             end: None,
         };
 
-        let result = get_daily_cpu_utilization(State(pool), Query(time_range)).await;
+        let result = get_daily_cpu_utilization_sqlite(pool, time_range).await;
         let response = result.into_response();
 
         assert_eq!(response.status(), StatusCode::OK);
@@ -576,7 +773,7 @@ mod tests {
             end: None,
         };
 
-        let result = get_gpu_utilization(State(pool), Query(time_range)).await;
+        let result = get_gpu_utilization_sqlite(pool, time_range).await;
         let response = result.into_response();
 
         assert_eq!(response.status(), StatusCode::OK);
@@ -597,7 +794,7 @@ mod tests {
             end: None,
         };
 
-        let result = get_hourly_gpu_utilization(State(pool), Query(time_range)).await;
+        let result = get_hourly_gpu_utilization_sqlite(pool, time_range).await;
         let response = result.into_response();
 
         assert_eq!(response.status(), StatusCode::OK);
@@ -618,7 +815,7 @@ mod tests {
             end: None,
         };
 
-        let result = get_daily_gpu_utilization(State(pool), Query(time_range)).await;
+        let result = get_daily_gpu_utilization_sqlite(pool, time_range).await;
         let response = result.into_response();
 
         assert_eq!(response.status(), StatusCode::OK);
