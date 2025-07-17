@@ -2,7 +2,7 @@ use axum::{
     body::Body,
     extract::{Query, State},
     http::{Request, StatusCode},
-    response::{Response, IntoResponse},
+    response::{IntoResponse, Response},
 };
 use elmo_api::routes::{TimeRange, Utilization};
 use http_body_util::BodyExt;
@@ -377,7 +377,7 @@ async fn test_root_endpoint() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = get_body_bytes(response).await;
     let body_str = String::from_utf8(body).unwrap();
     assert_eq!(body_str, "Hello, World!");
@@ -398,7 +398,7 @@ async fn test_cors_headers() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let headers = response.headers();
     assert!(headers.contains_key("access-control-allow-origin"));
 }
@@ -406,7 +406,7 @@ async fn test_cors_headers() {
 #[tokio::test]
 async fn test_cpu_endpoint_with_multiple_time_ranges() {
     let app = create_integration_test_app().await;
-    
+
     let test_cases = vec![
         ("/cpu", 8),
         ("/cpu?start=2024-03-27T00:00:00&end=2024-03-27T00:30:00", 3),
@@ -422,7 +422,7 @@ async fn test_cpu_endpoint_with_multiple_time_ranges() {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
-        
+
         let body = get_body_bytes(response).await;
         let cpu_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
         assert_eq!(cpu_data.len(), expected_count, "Failed for URI: {}", uri);
@@ -432,7 +432,7 @@ async fn test_cpu_endpoint_with_multiple_time_ranges() {
 #[tokio::test]
 async fn test_gpu_endpoint_with_multiple_time_ranges() {
     let app = create_integration_test_app().await;
-    
+
     let test_cases = vec![
         ("/gpu", 8),
         ("/gpu?start=2024-03-27T00:00:00&end=2024-03-27T00:30:00", 3),
@@ -448,7 +448,7 @@ async fn test_gpu_endpoint_with_multiple_time_ranges() {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
-        
+
         let body = get_body_bytes(response).await;
         let gpu_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
         assert_eq!(gpu_data.len(), expected_count, "Failed for URI: {}", uri);
@@ -458,7 +458,7 @@ async fn test_gpu_endpoint_with_multiple_time_ranges() {
 #[tokio::test]
 async fn test_hourly_aggregation_across_multiple_hours() {
     let app = create_integration_test_app().await;
-    
+
     let response = app
         .oneshot(
             Request::builder()
@@ -470,12 +470,12 @@ async fn test_hourly_aggregation_across_multiple_hours() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = get_body_bytes(response).await;
     let hourly_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
-    
+
     assert_eq!(hourly_data.len(), 3);
-    
+
     assert_eq!(hourly_data[0].allocated, Some(83));
     assert_eq!(hourly_data[1].allocated, Some(63));
     assert_eq!(hourly_data[2].allocated, Some(73));
@@ -484,7 +484,7 @@ async fn test_hourly_aggregation_across_multiple_hours() {
 #[tokio::test]
 async fn test_daily_aggregation_across_multiple_days() {
     let app = create_integration_test_app().await;
-    
+
     let response = app
         .oneshot(
             Request::builder()
@@ -496,12 +496,12 @@ async fn test_daily_aggregation_across_multiple_days() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = get_body_bytes(response).await;
     let daily_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
-    
+
     assert_eq!(daily_data.len(), 2);
-    
+
     assert_eq!(daily_data[0].allocated, Some(76));
     assert_eq!(daily_data[1].allocated, Some(73));
 }
@@ -509,7 +509,7 @@ async fn test_daily_aggregation_across_multiple_days() {
 #[tokio::test]
 async fn test_hourly_aggregation_with_time_range() {
     let app = create_integration_test_app().await;
-    
+
     let response = app
         .oneshot(
             Request::builder()
@@ -521,10 +521,10 @@ async fn test_hourly_aggregation_with_time_range() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = get_body_bytes(response).await;
     let hourly_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
-    
+
     assert_eq!(hourly_data.len(), 1);
     assert_eq!(hourly_data[0].allocated, Some(83));
 }
@@ -532,7 +532,7 @@ async fn test_hourly_aggregation_with_time_range() {
 #[tokio::test]
 async fn test_daily_aggregation_with_time_range() {
     let app = create_integration_test_app().await;
-    
+
     let response = app
         .oneshot(
             Request::builder()
@@ -544,10 +544,10 @@ async fn test_daily_aggregation_with_time_range() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = get_body_bytes(response).await;
     let daily_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
-    
+
     assert_eq!(daily_data.len(), 1);
     assert_eq!(daily_data[0].allocated, Some(76));
 }
@@ -555,7 +555,7 @@ async fn test_daily_aggregation_with_time_range() {
 #[tokio::test]
 async fn test_invalid_time_range() {
     let app = create_integration_test_app().await;
-    
+
     let response = app
         .oneshot(
             Request::builder()
@@ -572,7 +572,7 @@ async fn test_invalid_time_range() {
 #[tokio::test]
 async fn test_missing_start_parameter() {
     let app = create_integration_test_app().await;
-    
+
     let response = app
         .oneshot(
             Request::builder()
@@ -584,7 +584,7 @@ async fn test_missing_start_parameter() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = get_body_bytes(response).await;
     let cpu_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
     assert_eq!(cpu_data.len(), 8);
@@ -593,7 +593,7 @@ async fn test_missing_start_parameter() {
 #[tokio::test]
 async fn test_missing_end_parameter() {
     let app = create_integration_test_app().await;
-    
+
     let response = app
         .oneshot(
             Request::builder()
@@ -605,7 +605,7 @@ async fn test_missing_end_parameter() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = get_body_bytes(response).await;
     let cpu_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
     assert_eq!(cpu_data.len(), 8);
@@ -614,7 +614,7 @@ async fn test_missing_end_parameter() {
 #[tokio::test]
 async fn test_empty_result_set() {
     let app = create_integration_test_app().await;
-    
+
     let response = app
         .oneshot(
             Request::builder()
@@ -626,7 +626,7 @@ async fn test_empty_result_set() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = get_body_bytes(response).await;
     let cpu_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
     assert_eq!(cpu_data.len(), 0);
@@ -635,22 +635,22 @@ async fn test_empty_result_set() {
 #[tokio::test]
 async fn test_response_format() {
     let app = create_integration_test_app().await;
-    
+
     let response = app
         .oneshot(Request::builder().uri("/cpu").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let headers = response.headers();
     assert_eq!(headers.get("content-type").unwrap(), "application/json");
-    
+
     let body = get_body_bytes(response).await;
     let cpu_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
-    
+
     assert!(cpu_data.len() > 0);
-    
+
     let first_record = &cpu_data[0];
     assert!(first_record.time.is_some());
     assert!(first_record.allocated.is_some());
@@ -660,28 +660,38 @@ async fn test_response_format() {
 #[tokio::test]
 async fn test_all_endpoints_return_json() {
     let app = create_integration_test_app().await;
-    
+
     let endpoints = vec![
         "/cpu",
-        "/gpu", 
+        "/gpu",
         "/cpu/hourly",
         "/gpu/hourly",
         "/cpu/daily",
         "/gpu/daily",
     ];
-    
+
     for endpoint in endpoints {
         let response = app
             .clone()
-            .oneshot(Request::builder().uri(endpoint).body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri(endpoint)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
 
-        assert_eq!(response.status(), StatusCode::OK, "Failed for endpoint: {}", endpoint);
-        
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "Failed for endpoint: {}",
+            endpoint
+        );
+
         let headers = response.headers();
         assert_eq!(headers.get("content-type").unwrap(), "application/json");
-        
+
         let body = get_body_bytes(response).await;
         let _: Vec<Utilization> = serde_json::from_slice(&body)
             .expect(&format!("Failed to parse JSON for endpoint: {}", endpoint));
@@ -691,18 +701,18 @@ async fn test_all_endpoints_return_json() {
 #[tokio::test]
 async fn test_database_connection_failure_handling() {
     let empty_pool = SqlitePool::connect(":memory:").await.unwrap();
-    
+
     async fn failing_handler(
         State(_pool): State<SqlitePool>,
         Query(_time_range): Query<TimeRange>,
     ) -> impl IntoResponse {
         StatusCode::INTERNAL_SERVER_ERROR
     }
-    
+
     let app = axum::Router::new()
         .route("/cpu", axum::routing::get(failing_handler))
         .with_state(empty_pool);
-    
+
     let response = app
         .oneshot(Request::builder().uri("/cpu").body(Body::empty()).unwrap())
         .await

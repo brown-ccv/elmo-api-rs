@@ -385,15 +385,15 @@ async fn get_body_bytes(response: Response) -> Vec<u8> {
 async fn spawn_test_server() -> SocketAddr {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
-    
+
     let app = create_e2e_test_app().await;
-    
+
     tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
     });
-    
+
     tokio::time::sleep(Duration::from_millis(100)).await;
-    
+
     addr
 }
 
@@ -406,7 +406,7 @@ async fn test_e2e_root_endpoint() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = get_body_bytes(response).await;
     let body_str = String::from_utf8(body).unwrap();
     assert_eq!(body_str, "Hello, World!");
@@ -421,10 +421,10 @@ async fn test_e2e_cpu_endpoint_full_data() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = get_body_bytes(response).await;
     let cpu_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
-    
+
     assert_eq!(cpu_data.len(), 10);
     assert_eq!(cpu_data[0].allocated, Some(10));
     assert_eq!(cpu_data[0].total, Some(100));
@@ -441,10 +441,10 @@ async fn test_e2e_gpu_endpoint_full_data() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = get_body_bytes(response).await;
     let gpu_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
-    
+
     assert_eq!(gpu_data.len(), 10);
     assert_eq!(gpu_data[0].allocated, Some(15));
     assert_eq!(gpu_data[0].total, Some(100));
@@ -466,12 +466,12 @@ async fn test_e2e_hourly_cpu_aggregation() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = get_body_bytes(response).await;
     let hourly_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
-    
+
     assert_eq!(hourly_data.len(), 7);
-    
+
     assert_eq!(hourly_data[0].allocated, Some(15));
     assert_eq!(hourly_data[1].allocated, Some(35));
     assert_eq!(hourly_data[2].allocated, Some(50));
@@ -495,12 +495,12 @@ async fn test_e2e_daily_cpu_aggregation() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = get_body_bytes(response).await;
     let daily_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
-    
+
     assert_eq!(daily_data.len(), 3);
-    
+
     assert_eq!(daily_data[0].allocated, Some(30));
     assert_eq!(daily_data[1].allocated, Some(70));
     assert_eq!(daily_data[2].allocated, Some(93));
@@ -520,12 +520,12 @@ async fn test_e2e_hourly_gpu_aggregation() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = get_body_bytes(response).await;
     let hourly_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
-    
+
     assert_eq!(hourly_data.len(), 7);
-    
+
     assert_eq!(hourly_data[0].allocated, Some(20));
     assert_eq!(hourly_data[1].allocated, Some(40));
     assert_eq!(hourly_data[2].allocated, Some(55));
@@ -549,12 +549,12 @@ async fn test_e2e_daily_gpu_aggregation() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = get_body_bytes(response).await;
     let daily_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
-    
+
     assert_eq!(daily_data.len(), 3);
-    
+
     assert_eq!(daily_data[0].allocated, Some(35));
     assert_eq!(daily_data[1].allocated, Some(75));
     assert_eq!(daily_data[2].allocated, Some(97));
@@ -574,10 +574,10 @@ async fn test_e2e_cpu_time_range_filtering() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = get_body_bytes(response).await;
     let cpu_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
-    
+
     assert_eq!(cpu_data.len(), 3);
     assert_eq!(cpu_data[0].allocated, Some(10));
     assert_eq!(cpu_data[1].allocated, Some(20));
@@ -598,10 +598,10 @@ async fn test_e2e_gpu_time_range_filtering() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = get_body_bytes(response).await;
     let gpu_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
-    
+
     assert_eq!(gpu_data.len(), 3);
     assert_eq!(gpu_data[0].allocated, Some(65));
     assert_eq!(gpu_data[1].allocated, Some(75));
@@ -622,10 +622,10 @@ async fn test_e2e_hourly_aggregation_with_time_range() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = get_body_bytes(response).await;
     let hourly_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
-    
+
     assert_eq!(hourly_data.len(), 3);
     assert_eq!(hourly_data[0].allocated, Some(15));
     assert_eq!(hourly_data[1].allocated, Some(35));
@@ -646,10 +646,10 @@ async fn test_e2e_daily_aggregation_with_time_range() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = get_body_bytes(response).await;
     let daily_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
-    
+
     assert_eq!(daily_data.len(), 2);
     assert_eq!(daily_data[0].allocated, Some(30));
     assert_eq!(daily_data[1].allocated, Some(70));
@@ -674,7 +674,7 @@ async fn test_e2e_malformed_time_parameters() {
 #[tokio::test]
 async fn test_e2e_partial_time_parameters() {
     let app = create_e2e_test_app().await;
-    
+
     let response = app
         .clone()
         .oneshot(
@@ -687,7 +687,7 @@ async fn test_e2e_partial_time_parameters() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = get_body_bytes(response).await;
     let cpu_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
     assert_eq!(cpu_data.len(), 10);
@@ -735,7 +735,7 @@ async fn test_e2e_response_headers() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let headers = response.headers();
     assert_eq!(headers.get("content-type").unwrap(), "application/json");
     assert!(headers.contains_key("access-control-allow-origin"));
@@ -758,7 +758,7 @@ async fn test_e2e_preflight_cors_request() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let headers = response.headers();
     assert!(headers.contains_key("access-control-allow-origin"));
     assert!(headers.contains_key("access-control-allow-methods"));
@@ -767,13 +767,13 @@ async fn test_e2e_preflight_cors_request() {
 #[tokio::test]
 async fn test_e2e_data_consistency() {
     let app = create_e2e_test_app().await;
-    
+
     let cpu_response = app
         .clone()
         .oneshot(Request::builder().uri("/cpu").body(Body::empty()).unwrap())
         .await
         .unwrap();
-    
+
     let gpu_response = app
         .oneshot(Request::builder().uri("/gpu").body(Body::empty()).unwrap())
         .await
@@ -781,15 +781,15 @@ async fn test_e2e_data_consistency() {
 
     assert_eq!(cpu_response.status(), StatusCode::OK);
     assert_eq!(gpu_response.status(), StatusCode::OK);
-    
+
     let cpu_body = get_body_bytes(cpu_response).await;
     let gpu_body = get_body_bytes(gpu_response).await;
-    
+
     let cpu_data: Vec<Utilization> = serde_json::from_slice(&cpu_body).unwrap();
     let gpu_data: Vec<Utilization> = serde_json::from_slice(&gpu_body).unwrap();
-    
+
     assert_eq!(cpu_data.len(), gpu_data.len());
-    
+
     for (cpu, gpu) in cpu_data.iter().zip(gpu_data.iter()) {
         assert_eq!(cpu.total, gpu.total);
         assert!(cpu.allocated.is_some());
@@ -800,7 +800,7 @@ async fn test_e2e_data_consistency() {
 #[tokio::test]
 async fn test_e2e_concurrent_requests() {
     let app = create_e2e_test_app().await;
-    
+
     let tasks = (0..10).map(|_| {
         let app = app.clone();
         tokio::spawn(async move {
@@ -809,13 +809,13 @@ async fn test_e2e_concurrent_requests() {
                 .unwrap()
         })
     });
-    
+
     let responses = futures::future::join_all(tasks).await;
-    
+
     for response in responses {
         let response = response.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        
+
         let body = get_body_bytes(response).await;
         let cpu_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
         assert_eq!(cpu_data.len(), 10);
@@ -825,19 +825,19 @@ async fn test_e2e_concurrent_requests() {
 #[tokio::test]
 async fn test_e2e_large_dataset_performance() {
     use std::time::Instant;
-    
+
     let app = create_e2e_test_app().await;
-    
+
     let start = Instant::now();
     let response = app
         .oneshot(Request::builder().uri("/cpu").body(Body::empty()).unwrap())
         .await
         .unwrap();
     let duration = start.elapsed();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
     assert!(duration < Duration::from_millis(100));
-    
+
     let body = get_body_bytes(response).await;
     let cpu_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
     assert_eq!(cpu_data.len(), 10);
@@ -852,18 +852,18 @@ async fn test_e2e_json_response_structure() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = get_body_bytes(response).await;
     let json_value: Value = serde_json::from_slice(&body).unwrap();
-    
+
     assert!(json_value.is_array());
-    
+
     let array = json_value.as_array().unwrap();
     assert!(!array.is_empty());
-    
+
     let first_item = &array[0];
     assert!(first_item.is_object());
-    
+
     let obj = first_item.as_object().unwrap();
     assert!(obj.contains_key("time"));
     assert!(obj.contains_key("allocated"));
