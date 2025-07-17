@@ -101,7 +101,7 @@ pub async fn get_hourly_cpu_utilization(
             WHERE time BETWEEN $1 AND $2
         )
         SELECT 
-            time::text,
+            time,
             ROUND(AVG(allocated))::integer as allocated,
             ROUND(AVG(total))::integer as total
         FROM 
@@ -121,7 +121,7 @@ pub async fn get_hourly_cpu_utilization(
                 oscar.cpu
         )
         SELECT 
-            time::text,
+            time,
             ROUND(AVG(allocated))::integer as allocated,
             ROUND(AVG(total))::integer as total
         FROM 
@@ -223,7 +223,7 @@ pub async fn get_hourly_gpu_utilization(
             WHERE time BETWEEN $1 AND $2
         )
         SELECT 
-            time::text,
+            time,
             CAST(ROUND(AVG(allocated)) AS INTEGER) as allocated,
             CAST(ROUND(AVG(total)) AS INTEGER) as total
         FROM formatted_time
@@ -243,7 +243,7 @@ pub async fn get_hourly_gpu_utilization(
                 oscar.gpu
         )
         SELECT 
-            time::text,
+            time,
             CAST(ROUND(AVG(allocated)) AS INTEGER) as allocated,
             CAST(ROUND(AVG(total)) AS INTEGER) as total
         FROM formatted_time
@@ -296,7 +296,7 @@ pub async fn get_daily_cpu_utilization(
             WHERE time BETWEEN $1 AND $2
         )
         SELECT 
-            time::text,
+            time,
             CAST(ROUND(AVG(allocated)) AS INTEGER) as allocated,
             CAST(ROUND(AVG(total)) AS INTEGER) as total
         FROM formatted_time
@@ -316,7 +316,7 @@ pub async fn get_daily_cpu_utilization(
                 oscar.cpu
         )
         SELECT 
-            time::text,
+            time,
             CAST(ROUND(AVG(allocated)) AS INTEGER) as allocated,
             CAST(ROUND(AVG(total)) AS INTEGER) as total
         FROM formatted_time
@@ -370,7 +370,7 @@ pub async fn get_daily_gpu_utilization(
             WHERE time BETWEEN $1 AND $2
         )
         SELECT 
-            time::text,
+            time,
             CAST(ROUND(AVG(allocated)) AS INTEGER) as allocated,
             CAST(ROUND(AVG(total)) AS INTEGER) as total
         FROM formatted_time
@@ -390,7 +390,7 @@ pub async fn get_daily_gpu_utilization(
                 oscar.gpu
         )
         SELECT 
-            time::text,
+            time,
             CAST(ROUND(AVG(allocated)) AS INTEGER) as allocated,
             CAST(ROUND(AVG(total)) AS INTEGER) as total
         FROM formatted_time

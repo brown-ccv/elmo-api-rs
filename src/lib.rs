@@ -3,6 +3,7 @@ pub mod routes;
 pub use routes::{TimeRange, Utilization};
 
 use anyhow::Result;
+use axum::http::HeaderValue;
 use dotenvy::dotenv;
 use sqlx::postgres::{PgConnectOptions, PgPool, PgSslMode};
 use std::env;
@@ -21,11 +22,6 @@ pub async fn get_db_connection() -> Result<PgPool> {
         .password(&env::var("DB_PASSWORD").unwrap())
         .ssl_mode(PgSslMode::Allow);
 
-    println!("DB_HOST: {}", env::var("DB_HOST").unwrap());
-    println!("DB_NAME: {}", env::var("DB_NAME").unwrap());
-    println!("DB_USER: {}", env::var("DB_USER").unwrap());
-    println!("DB_PASSWORD: {}", env::var("DB_PASSWORD").unwrap());
-
     let pool = PgPool::connect_with(opts)
         .await
         .expect("Failed to connect to database");
@@ -41,9 +37,10 @@ pub async fn create_app(pool: PgPool) -> axum::Router {
     };
 
     let cors = CorsLayer::new()
-        .allow_origin(Any)
+        .allow_origin("*".parse::<HeaderValue>().unwrap())
         .allow_methods(Any)
-        .allow_headers(Any);
+        .allow_headers(Any)
+        .allow_credentials(false);
 
     // Tower HTTP Tracing Middleware
     // This adds HTTP-specific request/response tracking on top of the global tracing setup in main.rs
@@ -66,7 +63,7 @@ pub async fn create_app(pool: PgPool) -> axum::Router {
         .route("/gpu/hourly", get(get_hourly_gpu_utilization))
         .route("/cpu/daily", get(get_daily_cpu_utilization))
         .route("/gpu/daily", get(get_daily_gpu_utilization))
-        .layer(trace_layer) // Add trace layer before cors
-        .layer(cors)
+        .layer(cors) // Add CORS layer before trace layer
+        .layer(trace_layer)
         .with_state(pool)
 }

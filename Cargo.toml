@@ -23,3 +23,4 @@ tokio-test = "0.4"
 hyper = { version = "1.0", features = ["full", "http1", "http2", "client", "server"] }
 tower = { version = "0.4", features = ["util"] }
 bytes = "1.0"
+futures = "0.3"
