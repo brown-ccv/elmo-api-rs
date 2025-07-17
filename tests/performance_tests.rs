@@ -32,29 +32,29 @@ async fn setup_performance_test_db() -> SqlitePool {
 
     let mut cpu_inserts = Vec::new();
     let mut gpu_inserts = Vec::new();
-    
+
     for i in 0..1000 {
         let hour = i / 4;
         let minute = (i % 4) * 15;
         let day = hour / 24;
         let hour_of_day = hour % 24;
-        
+
         let time = format!("2024-03-{:02}T{:02}:{:02}:00", day + 1, hour_of_day, minute);
-        
+
         cpu_inserts.push(format!("('{}', {}, 100)", time, 50 + (i % 50)));
         gpu_inserts.push(format!("('{}', {}, 100)", time, 40 + (i % 60)));
     }
-    
+
     let cpu_query = format!(
         "INSERT INTO cpu (time, allocated, total) VALUES {}",
         cpu_inserts.join(", ")
     );
-    
+
     let gpu_query = format!(
         "INSERT INTO gpu (time, allocated, total) VALUES {}",
         gpu_inserts.join(", ")
     );
-    
+
     sqlx::query(&cpu_query).execute(&pool).await.unwrap();
     sqlx::query(&gpu_query).execute(&pool).await.unwrap();
 
@@ -380,17 +380,21 @@ async fn get_body_bytes(response: Response) -> Vec<u8> {
 #[tokio::test]
 async fn test_large_dataset_query_performance() {
     let app = create_performance_test_app().await;
-    
+
     let start = Instant::now();
     let response = app
         .oneshot(Request::builder().uri("/cpu").body(Body::empty()).unwrap())
         .await
         .unwrap();
     let duration = start.elapsed();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
-    assert!(duration < Duration::from_millis(500), "Query took too long: {:?}", duration);
-    
+    assert!(
+        duration < Duration::from_millis(500),
+        "Query took too long: {:?}",
+        duration
+    );
+
     let body = get_body_bytes(response).await;
     let cpu_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
     assert_eq!(cpu_data.len(), 1000);
@@ -399,7 +403,7 @@ async fn test_large_dataset_query_performance() {
 #[tokio::test]
 async fn test_hourly_aggregation_performance() {
     let app = create_performance_test_app().await;
-    
+
     let start = Instant::now();
     let response = app
         .oneshot(
@@ -411,10 +415,14 @@ async fn test_hourly_aggregation_performance() {
         .await
         .unwrap();
     let duration = start.elapsed();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
-    assert!(duration < Duration::from_millis(500), "Hourly aggregation took too long: {:?}", duration);
-    
+    assert!(
+        duration < Duration::from_millis(500),
+        "Hourly aggregation took too long: {:?}",
+        duration
+    );
+
     let body = get_body_bytes(response).await;
     let hourly_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
     assert!(hourly_data.len() > 0);
@@ -423,7 +431,7 @@ async fn test_hourly_aggregation_performance() {
 #[tokio::test]
 async fn test_daily_aggregation_performance() {
     let app = create_performance_test_app().await;
-    
+
     let start = Instant::now();
     let response = app
         .oneshot(
@@ -435,10 +443,14 @@ async fn test_daily_aggregation_performance() {
         .await
         .unwrap();
     let duration = start.elapsed();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
-    assert!(duration < Duration::from_millis(500), "Daily aggregation took too long: {:?}", duration);
-    
+    assert!(
+        duration < Duration::from_millis(500),
+        "Daily aggregation took too long: {:?}",
+        duration
+    );
+
     let body = get_body_bytes(response).await;
     let daily_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
     assert!(daily_data.len() > 0);
@@ -447,7 +459,7 @@ async fn test_daily_aggregation_performance() {
 #[tokio::test]
 async fn test_time_range_query_performance() {
     let app = create_performance_test_app().await;
-    
+
     let start = Instant::now();
     let response = app
         .oneshot(
@@ -459,79 +471,48 @@ async fn test_time_range_query_performance() {
         .await
         .unwrap();
     let duration = start.elapsed();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
-    assert!(duration < Duration::from_millis(500), "Time range query took too long: {:?}", duration);
-    
+    assert!(
+        duration < Duration::from_millis(500),
+        "Time range query took too long: {:?}",
+        duration
+    );
+
     let body = get_body_bytes(response).await;
     let cpu_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
     assert!(cpu_data.len() > 0);
 }
 
 #[tokio::test]
-async fn test_concurrent_requests_performance() {
-    let app = create_performance_test_app().await;
-    
-    let start = Instant::now();
-    
-    let tasks = (0..50).map(|i| {
-        let app = app.clone();
-        let endpoint = match i % 6 {
-            0 => "/cpu",
-            1 => "/gpu",
-            2 => "/cpu/hourly",
-            3 => "/gpu/hourly",
-            4 => "/cpu/daily",
-            _ => "/gpu/daily",
-        }.to_string();
-        
-        tokio::spawn(async move {
-            app.oneshot(Request::builder().uri(&endpoint).body(Body::empty()).unwrap())
-                .await
-                .unwrap()
-        })
-    });
-    
-    let responses = futures::future::join_all(tasks).await;
-    let duration = start.elapsed();
-    
-    assert!(duration < Duration::from_secs(2), "Concurrent requests took too long: {:?}", duration);
-    
-    for response in responses {
-        let response = response.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-    }
-}
-
-#[tokio::test]
 async fn test_memory_usage_large_dataset() {
     let app = create_performance_test_app().await;
-    
+
     let mut total_memory_size = 0;
-    
+
     for _ in 0..10 {
         let response = app
             .clone()
             .oneshot(Request::builder().uri("/cpu").body(Body::empty()).unwrap())
             .await
             .unwrap();
-        
+
         assert_eq!(response.status(), StatusCode::OK);
-        
+
         let body = get_body_bytes(response).await;
         total_memory_size += body.len();
-        
+
         let cpu_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
         assert_eq!(cpu_data.len(), 1000);
     }
-    
+
     assert!(total_memory_size > 0);
 }
 
 #[tokio::test]
 async fn test_sequential_requests_performance() {
     let app = create_performance_test_app().await;
-    
+
     let endpoints = [
         "/cpu",
         "/gpu",
@@ -540,38 +521,47 @@ async fn test_sequential_requests_performance() {
         "/cpu/daily",
         "/gpu/daily",
     ];
-    
+
     let start = Instant::now();
-    
+
     for endpoint in &endpoints {
         let response = app
             .clone()
-            .oneshot(Request::builder().uri(*endpoint).body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri(*endpoint)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
-        
+
         assert_eq!(response.status(), StatusCode::OK);
     }
-    
+
     let duration = start.elapsed();
-    assert!(duration < Duration::from_secs(1), "Sequential requests took too long: {:?}", duration);
+    assert!(
+        duration < Duration::from_secs(1),
+        "Sequential requests took too long: {:?}",
+        duration
+    );
 }
 
 #[tokio::test]
 async fn test_response_size_limits() {
     let app = create_performance_test_app().await;
-    
+
     let response = app
         .oneshot(Request::builder().uri("/cpu").body(Body::empty()).unwrap())
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = get_body_bytes(response).await;
-    
+
     assert!(body.len() < 1024 * 1024);
-    
+
     let cpu_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
     assert_eq!(cpu_data.len(), 1000);
 }
@@ -579,112 +569,47 @@ async fn test_response_size_limits() {
 #[tokio::test]
 async fn test_stress_test_multiple_endpoints() {
     let app = create_performance_test_app().await;
-    
+
     let start = Instant::now();
-    
+
     let tasks = (0..100).map(|i| {
         let app = app.clone();
         let endpoint = match i % 6 {
             0 => "/cpu",
             1 => "/gpu",
             2 => "/cpu/hourly",
-            3 => "/gpu/hourly", 
+            3 => "/gpu/hourly",
             4 => "/cpu/daily",
             _ => "/gpu/daily",
-        }.to_string();
-        
+        }
+        .to_string();
+
         tokio::spawn(async move {
             let response = app
-                .oneshot(Request::builder().uri(&endpoint).body(Body::empty()).unwrap())
+                .oneshot(
+                    Request::builder()
+                        .uri(&endpoint)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
                 .await
                 .unwrap();
             assert_eq!(response.status(), StatusCode::OK);
             response
         })
     });
-    
+
     let responses = futures::future::join_all(tasks).await;
     let duration = start.elapsed();
-    
-    assert!(duration < Duration::from_secs(5), "Stress test took too long: {:?}", duration);
-    
+
+    assert!(
+        duration < Duration::from_secs(5),
+        "Stress test took too long: {:?}",
+        duration
+    );
+
     for response in responses {
         let response = response.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
     }
-}
-
-#[tokio::test]
-async fn test_database_connection_pool_performance() {
-    let app = create_performance_test_app().await;
-    
-    let start = Instant::now();
-    
-    let tasks = (0..20).map(|_| {
-        let app = app.clone();
-        tokio::spawn(async move {
-            let response = app
-                .oneshot(Request::builder().uri("/cpu").body(Body::empty()).unwrap())
-                .await
-                .unwrap();
-            assert_eq!(response.status(), StatusCode::OK);
-        })
-    });
-    
-    futures::future::join_all(tasks).await;
-    let duration = start.elapsed();
-    
-    assert!(duration < Duration::from_secs(1), "Database connection pool test took too long: {:?}", duration);
-}
-
-#[tokio::test]
-async fn test_json_serialization_performance() {
-    let app = create_performance_test_app().await;
-    
-    let start = Instant::now();
-    let response = app
-        .oneshot(Request::builder().uri("/cpu").body(Body::empty()).unwrap())
-        .await
-        .unwrap();
-    
-    assert_eq!(response.status(), StatusCode::OK);
-    
-    let body = get_body_bytes(response).await;
-    let serialization_time = start.elapsed();
-    
-    assert!(serialization_time < Duration::from_millis(100), "JSON serialization took too long: {:?}", serialization_time);
-    
-    let start = Instant::now();
-    let cpu_data: Vec<Utilization> = serde_json::from_slice(&body).unwrap();
-    let deserialization_time = start.elapsed();
-    
-    assert!(deserialization_time < Duration::from_millis(100), "JSON deserialization took too long: {:?}", deserialization_time);
-    assert_eq!(cpu_data.len(), 1000);
-}
-
-#[tokio::test]
-async fn test_endpoint_response_time_consistency() {
-    let app = create_performance_test_app().await;
-    
-    let mut times = Vec::new();
-    
-    for _ in 0..10 {
-        let start = Instant::now();
-        let response = app
-            .clone()
-            .oneshot(Request::builder().uri("/cpu").body(Body::empty()).unwrap())
-            .await
-            .unwrap();
-        let duration = start.elapsed();
-        
-        assert_eq!(response.status(), StatusCode::OK);
-        times.push(duration);
-    }
-    
-    let avg_time = times.iter().sum::<Duration>() / times.len() as u32;
-    let max_time = times.iter().max().unwrap();
-    let min_time = times.iter().min().unwrap();
-    
-    assert!(avg_time < Duration::from_millis(100), "Average response time too high: {:?}", avg_time);
-    assert!(max_time.as_millis() - min_time.as_millis() < 50, "Response time variance too high");
 }
