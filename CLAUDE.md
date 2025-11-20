@@ -8,11 +8,14 @@ This is a Rust API for elmo (elegant live monitoring of Oscar) that provides HTT
 
 ## Development Commands
 
-- **Run the server**: `cargo run` (starts on localhost:3000)
+- **Run the server**: `cargo run` (starts on 0.0.0.0:3000)
 - **Run tests**: `cargo test`
+- **Run specific test**: `cargo test test_name`
 - **Build**: `cargo build`
 - **Build release**: `cargo build --release`
 - **Check for errors**: `cargo check`
+- **Format code**: `cargo fmt`
+- **Lint code**: `cargo clippy`
 
 ## Architecture
 
@@ -55,6 +58,7 @@ Uses dotenvy for loading .env files in development.
 - Unit tests use SQLite with in-memory databases for speed
 - Production routes are duplicated as SQLite-compatible versions in tests
 - Tests include both time-filtered and unfiltered data queries
+- Test types: `api_tests.rs`, `integration_tests.rs`, `end_to_end_tests.rs`, `performance_tests.rs`
 - All tests run with `cargo test`
 
 
