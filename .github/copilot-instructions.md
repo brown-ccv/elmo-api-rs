@@ -203,9 +203,7 @@ All production routes follow this pattern:
 ### DO NOT:
 - Add dependencies without checking for vulnerabilities
 - Modify the database schema (it's managed externally)
-- Change API response formats (breaking change for clients)
 - Skip running tests before committing
-- Commit code that doesn't pass `cargo clippy -- -D warnings`
 - Commit unformatted code (run `cargo fmt --all` first)
 
 ### ALWAYS:
