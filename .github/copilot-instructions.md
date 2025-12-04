@@ -107,29 +107,13 @@ The GitHub Actions workflow (`.github/workflows/test.yml`) runs on all pull requ
 
 ## Project Architecture
 
-### Directory Structure
+### Key Directories
 
-```
-elmo-api-rs/
-├── src/                    # Source code
-│   ├── main.rs            # Entry point, tracing setup, server startup
-│   ├── lib.rs             # Database connection, app creation, middleware
-│   └── routes.rs          # API endpoints and request handlers
-├── tests/                  # Test suites (all use SQLite)
-│   ├── api_tests.rs       # API endpoint tests
-│   ├── end_to_end_tests.rs # E2E scenarios  
-│   ├── integration_tests.rs # Integration tests
-│   └── performance_tests.rs # Performance benchmarks
-├── sql/                    # SQL scripts
-│   └── create_service_account.sql # PostgreSQL setup
-├── scripts/gcp/           # Google Cloud Platform deployment scripts
-├── data/                   # SQLite database (for local testing)
-├── .github/workflows/     # CI/CD workflows
-├── Cargo.toml             # Rust package manifest
-├── Cargo.lock             # Dependency lock file
-├── Dockerfile             # Container build configuration
-└── .env.example           # Environment variable template
-```
+- **`src/`** - All source code (main.rs, lib.rs, routes.rs)
+- **`tests/`** - Test suites (api_tests.rs, integration_tests.rs, end_to_end_tests.rs, performance_tests.rs)
+- **`.github/workflows/`** - CI/CD configuration
+- **`Cargo.toml`** - Dependencies and package metadata
+- **`.env.example`** - Environment variable template (copy to `.env` for local development)
 
 ### Core Components
 
